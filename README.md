@@ -108,7 +108,7 @@ grsync --to-main
 브랜치 이름이 다르면 명시할 수 있습니다.
 
 ```bash
-grsync --to-main --main-branch main --dev-branch dev
+grsync --to-main -m main -d dev
 ```
 
 실행 흐름:
@@ -123,12 +123,12 @@ grsync --to-main --main-branch main --dev-branch dev
 - `--to-main`: `dev -> main` 동기화 모드 실행
 - `--to-dev`: `target -> dev` 동기화 모드 실행(기본값)
 - `--branch <name>`: `to-dev` 모드의 대상 브랜치 지정
-- `--main-branch <name>`: 메인 브랜치 이름 지정
-- `--dev-branch <name>`: 개발 브랜치 이름 지정
-- `--remote <name>`: 원격 이름 지정(기본 `origin`)
+- `--main-branch <name>`, `-m <name>`: 메인 브랜치 이름 지정
+- `--dev-branch <name>`, `-d <name>`: 개발 브랜치 이름 지정
+- `--remote <name>`, `-r <name>`: 원격 이름 지정(기본 `origin`)
 - `--max-push-retry <num>`: push 재시도 횟수 지정
 - `--squash`: `to-dev` 모드에서 대상 브랜치 커밋을 1개로 squash
-- `--message <text>`, `-m <text>`: `--squash` 시 사용할 커밋 메시지
+- `--commit <text>`, `-c <text>`: `--squash` 시 사용할 커밋 메시지
 - `--dry-run`: 실제 변경 없이 실행 명령만 출력
 - `--yes`, `-y`: 확인 프롬프트 건너뛰기
 
@@ -141,14 +141,14 @@ grsync --to-main --main-branch main --dev-branch dev
 
 2. 대상/브랜치 옵션
 - `--branch <name>` (to-dev)
-- `--main-branch <name> --dev-branch <name>` (to-main)
+- `--main-branch <name>`(`-m`) + `--dev-branch <name>`(`-d`) (to-main)
 
 3. 동작 옵션
 - `--squash`
-- `--message <text>` 또는 `-m <text>` (`--squash`와 함께 필수)
+- `--commit <text>` 또는 `-c <text>` (`--squash`와 함께 필수)
 
 4. 실행 제어 옵션
-- `--remote <name>`
+- `--remote <name>` 또는 `-r <name>`
 - `--max-push-retry <num>`
 - `--dry-run`
 - `--yes`
@@ -163,10 +163,10 @@ grsync --branch feature/test
 grsync --to-dev --branch feature/test
 
 # squash + 메시지
-grsync --to-dev --branch feature/test --squash -m "feat: merge feature test"
+grsync --to-dev --branch feature/test --squash -c "feat: merge feature test"
 
 # main 반영 모드
-grsync --to-main --main-branch main --dev-branch dev --yes
+grsync --to-main -m main -d dev --yes
 ```
 
 ## 추천 실행 예시
@@ -186,13 +186,13 @@ grsync --yes --branch feature/user-auth
 커스텀 원격 사용:
 
 ```bash
-grsync --remote upstream --branch feature/payment-checkout
+grsync -r upstream --branch feature/payment-checkout
 ```
 
 Squash로 1커밋 정리 후 반영:
 
 ```bash
-grsync --branch feature/user-auth --squash -m "feat: integrate user auth"
+grsync --branch feature/user-auth --squash -c "feat: integrate user auth"
 ```
 
 ## 안전장치
@@ -207,7 +207,7 @@ grsync --branch feature/user-auth --squash -m "feat: integrate user auth"
 
 - `원격 브랜치가 없습니다: origin/main`
   - 원격 브랜치명이 다를 수 있습니다.
-  - `--main-branch`, `--dev-branch`, `--remote` 옵션으로 실제 이름을 맞춰 실행하세요.
+  - `--main-branch(-m)`, `--dev-branch(-d)`, `--remote(-r)` 옵션으로 실제 이름을 맞춰 실행하세요.
 - `작업 트리가 깨끗하지 않습니다`
   - `git status` 확인 후 커밋 또는 스태시하세요.
 - `push 재시도 한도(...)를 초과했습니다`

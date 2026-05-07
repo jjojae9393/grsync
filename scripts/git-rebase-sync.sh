@@ -60,12 +60,12 @@ Options:
   --to-main                 Run dev -> main sync flow
   --to-dev                  Run target -> dev sync flow (default)
   --branch <name>           Target branch for to-dev flow
-  --main-branch <name>      Main branch name (default: ${DEFAULT_MAIN_BRANCH})
-  --dev-branch <name>       Dev branch name (default: ${DEFAULT_DEV_BRANCH})
-  --remote <name>           Remote name (default: ${DEFAULT_REMOTE})
+  --main-branch, -m <name>  Main branch name (default: ${DEFAULT_MAIN_BRANCH})
+  --dev-branch, -d <name>   Dev branch name (default: ${DEFAULT_DEV_BRANCH})
+  --remote, -r <name>       Remote name (default: ${DEFAULT_REMOTE})
   --max-push-retry <num>    Push retry count (default: ${DEFAULT_MAX_PUSH_RETRY})
   --squash                  Squash target commits into a single commit (to-dev only)
-  --message, -m <text>      Commit message used with --squash
+  --commit, -c <text>       Commit message used with --squash
   --dry-run                 Print git commands without executing mutating commands
   --yes, -y                 Skip confirmation prompts
   --help, -h                Show this help
@@ -73,7 +73,7 @@ Options:
 Examples:
   ${SCRIPT_NAME} feature/user-auth
   ${SCRIPT_NAME} --branch feature/user-auth
-  ${SCRIPT_NAME} --branch feature/user-auth --squash -m "feat: add user auth"
+  ${SCRIPT_NAME} --branch feature/user-auth --squash -c "feat: add user auth"
   ${SCRIPT_NAME} --to-main
   ${SCRIPT_NAME} --to-main --main-branch main --dev-branch dev --yes
 USAGE
@@ -158,15 +158,15 @@ validate_squash_options() {
   fi
 
   if [[ "${is_main_mode}" == "true" && -n "${SQUASH_MESSAGE}" ]]; then
-    die "--message(-m) 옵션은 to-dev 모드에서만 사용할 수 있습니다."
+    die "--commit(-c) 옵션은 to-dev 모드에서만 사용할 수 있습니다."
   fi
 
   if [[ "${SQUASH}" == "true" && -z "${SQUASH_MESSAGE}" ]]; then
-    die "--squash 사용 시 --message 또는 -m 으로 커밋 메시지를 입력하세요."
+    die "--squash 사용 시 --commit 또는 -c 로 커밋 메시지를 입력하세요."
   fi
 
   if [[ "${SQUASH}" != "true" && -n "${SQUASH_MESSAGE}" ]]; then
-    die "--message(-m)는 --squash와 함께 사용해야 합니다."
+    die "--commit(-c)는 --squash와 함께 사용해야 합니다."
   fi
 }
 
@@ -309,18 +309,18 @@ parse_args() {
         TARGET_BRANCH="$2"
         shift 2
         ;;
-      --main-branch)
-        [[ $# -ge 2 ]] || die "--main-branch 에 값이 필요합니다."
+      --main-branch|-m)
+        [[ $# -ge 2 ]] || die "--main-branch(-m) 에 값이 필요합니다."
         MAIN_BRANCH="$2"
         shift 2
         ;;
-      --dev-branch)
-        [[ $# -ge 2 ]] || die "--dev-branch 에 값이 필요합니다."
+      --dev-branch|-d)
+        [[ $# -ge 2 ]] || die "--dev-branch(-d) 에 값이 필요합니다."
         DEV_BRANCH="$2"
         shift 2
         ;;
-      --remote)
-        [[ $# -ge 2 ]] || die "--remote 에 값이 필요합니다."
+      --remote|-r)
+        [[ $# -ge 2 ]] || die "--remote(-r) 에 값이 필요합니다."
         REMOTE="$2"
         shift 2
         ;;
@@ -333,8 +333,8 @@ parse_args() {
         SQUASH=true
         shift
         ;;
-      --message|-m)
-        [[ $# -ge 2 ]] || die "--message(-m) 에 값이 필요합니다."
+      --commit|-c)
+        [[ $# -ge 2 ]] || die "--commit(-c) 에 값이 필요합니다."
         SQUASH_MESSAGE="$2"
         shift 2
         ;;
