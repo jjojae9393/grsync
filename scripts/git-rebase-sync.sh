@@ -54,10 +54,12 @@ Usage:
 Modes:
   default (to-dev):
     1) update dev from origin (ff-only)
-    2) rebase target branch on dev
-    3) optional: squash target commits into one commit (--squash)
-    4) fast-forward merge target -> dev
-    5) push dev to origin with retry
+    2) update target branch from origin (ff-only, if exists)
+    3) rebase target branch on dev
+    4) optional: squash target commits into one commit (--squash)
+    5) force-with-lease push target to origin (keep linear history)
+    6) fast-forward merge target -> dev
+    7) push dev to origin with retry
 
   --to-main:
     1) update main/dev from origin (ff-only)
@@ -139,6 +141,13 @@ require_remote_branch() {
   require_non_empty_branch "${branch}"
 
   git ls-remote --exit-code --heads "${REMOTE}" "${branch}" >/dev/null 2>&1 || die "원격 브랜치가 없습니다: ${REMOTE}/${branch}"
+}
+
+has_remote_branch() {
+  local branch="$1"
+  require_non_empty_branch "${branch}"
+
+  git ls-remote --exit-code --heads "${REMOTE}" "${branch}" >/dev/null 2>&1
 }
 
 require_clean_worktree() {
@@ -576,33 +585,52 @@ parse_args() {
 
 sync_to_dev() {
   local target_branch="${TARGET_BRANCH:-$(git branch --show-current)}"
+  local target_has_remote=false
 
   require_non_empty_branch "${target_branch}"
   require_distinct_branches "${target_branch}" "${DEV_BRANCH}"
   require_local_branch "${target_branch}"
   require_local_branch "${DEV_BRANCH}"
   require_remote_branch "${DEV_BRANCH}"
+  if has_remote_branch "${target_branch}"; then
+    target_has_remote=true
+  fi
 
   log "실행 계획: ${target_branch} -> ${DEV_BRANCH} (remote: ${REMOTE})"
-  confirm_or_die "${DEV_BRANCH} 브랜치를 원격에 push 합니다. 계속할까요?"
+  confirm_or_die "${target_branch} rebase로 커밋 해시가 변경될 수 있으며, 원격 브랜치가 있으면 force-with-lease push 합니다. 계속할까요?"
 
   log "1) ${DEV_BRANCH} 업데이트 (ff-only)"
   update_branch_from_remote_ff_only "${DEV_BRANCH}"
 
-  log "2) ${target_branch} rebase ${DEV_BRANCH}"
+  if [[ "${target_has_remote}" == "true" ]]; then
+    log "2) ${target_branch} 업데이트 (ff-only)"
+    update_branch_from_remote_ff_only "${target_branch}"
+  else
+    log "2) ${target_branch} 원격 브랜치 없음: 업데이트 건너뜀"
+    checkout_branch "${target_branch}"
+  fi
+
+  log "3) ${target_branch} rebase ${DEV_BRANCH}"
   checkout_branch "${target_branch}"
   git_cmd rebase "${DEV_BRANCH}"
 
   if [[ "${SQUASH}" == "true" ]]; then
-    log "3) ${target_branch} 커밋 squash"
+    log "4) ${target_branch} 커밋 squash"
     squash_branch_on_base "${target_branch}" "${DEV_BRANCH}" "${SQUASH_MESSAGE}"
   fi
 
-  log "4) ${DEV_BRANCH} 에 ff-only merge"
+  if [[ "${target_has_remote}" == "true" ]]; then
+    log "5) origin/${target_branch} force-with-lease push"
+    git_cmd push --force-with-lease "${REMOTE}" "${target_branch}"
+  else
+    log "5) ${target_branch} 원격 브랜치 없음: push 건너뜀"
+  fi
+
+  log "6) ${DEV_BRANCH} 에 ff-only merge"
   checkout_branch "${DEV_BRANCH}"
   git_cmd merge --ff-only "${target_branch}"
 
-  log "5) origin/${DEV_BRANCH} push (거절 시 rebase 후 재시도)"
+  log "7) origin/${DEV_BRANCH} push (거절 시 rebase 후 재시도)"
   push_with_retry "${DEV_BRANCH}"
 
   log "완료: ${DEV_BRANCH} <- ${target_branch} (ff-only + push)"
