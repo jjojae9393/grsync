@@ -1,72 +1,74 @@
 # grsync
 
-`grsync`는 작업 브랜치를 `dev`/`main` 최신 기준으로 rebase해 커밋 히스토리를 선형으로 정리하고, `ff-only` 머지와 push까지 일관되게 처리해 배포 전 통합 과정을 안전하게 자동화하는 도구입니다.
+`grsync`는 `dev/main` 기반 rebase, ff-only merge, push를 일관된 절차로 자동화하는 Git CLI입니다.
 
-## 스크립트 위치
+핵심 목적:
+- 브랜치 통합 전에 히스토리를 선형화(rebase)
+- ff-only 정책으로 merge 안정성 유지
+- 팀 내 통합 절차를 동일한 명령으로 표준화
 
-- `scripts/git-rebase-sync.sh`
+## 설치 방법 (npm)
 
-## 설치 방법
+필수 조건:
+- `git`
+- Node.js 18+
+- npm
 
-### 1) 저장소 준비
+### 1) npm Registry에서 전역 설치
+
+```bash
+npm install -g grsync-cli
+```
+
+### 2) 저장소에서 직접 전역 설치
 
 ```bash
 git clone <repo-url>
 cd grsync
+npm install -g .
 ```
 
-### 2) 실행 권한 확인
+### 3) 개발 링크 설치
 
 ```bash
-chmod +x scripts/git-rebase-sync.sh
+git clone <repo-url>
+cd grsync
+npm link
 ```
 
-### 3) Git/브랜치 확인
-
-```bash
-git --version
-git branch -a
-```
-
-필수 조건:
-- `git` 명령어가 설치되어 있어야 합니다.
-- 원격(`origin`)에 동기화 대상 브랜치가 있어야 합니다.
-- 작업 트리가 깨끗해야 합니다.
-
-## 사용 방법
-
-### `grsync` 명령으로 등록해서 사용하기 (권장)
-
-매번 `scripts/git-rebase-sync.sh`를 입력하지 않으려면 심볼릭 링크를 만들어 `grsync`로 실행할 수 있습니다.
-
-1) 사용자 실행 경로 준비
-
-```bash
-mkdir -p "$HOME/.local/bin"
-```
-
-2) `grsync` 링크 생성
-
-```bash
-ln -sf "$(pwd)/scripts/git-rebase-sync.sh" "$HOME/.local/bin/grsync"
-```
-
-`$(pwd)`는 "현재 터미널이 위치한 폴더의 절대경로"를 의미합니다. 따라서 이 명령은 현재 `grsync` 폴더 안의 스크립트를 `grsync` 명령으로 연결합니다.
-
-3) `PATH` 등록 (`zsh`, 1회)
-
-```bash
-grep -q 'HOME/.local/bin' "$HOME/.zshrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
-source "$HOME/.zshrc"
-```
-
-4) 동작 확인
+설치 확인:
 
 ```bash
 grsync --help
 ```
 
-`zsh`가 아닌 쉘을 쓰는 경우에는 해당 쉘 프로필 파일(`~/.bashrc` 등)에 동일한 `PATH` 설정을 추가하면 됩니다.
+제거:
+
+```bash
+npm uninstall -g grsync-cli
+```
+
+## 프로젝트 자동 등록
+
+`grsync`를 Git 프로젝트에서 처음 실행하면, 해당 프로젝트에 로컬 설정을 자동 등록합니다.
+
+- 저장 위치: `.git/grsync/config`
+- 특징: Git 추적 대상이 아니므로 작업 트리를 더럽히지 않음
+- 포함 값: `remote`, `main branch`, `dev branch`
+
+초기화(강제 재생성):
+
+```bash
+grsync --init
+```
+
+현재 설정 확인:
+
+```bash
+grsync --show-config
+```
+
+## 기본 사용
 
 ### 도움말
 
@@ -74,149 +76,67 @@ grsync --help
 grsync --help
 ```
 
-### 기본 모드: 작업 브랜치 -> dev 동기화
+### to-dev (기본 모드)
 
-현재 브랜치를 `dev`에 fast-forward 가능한 형태로 반영하고 `origin/dev`까지 push합니다.
+현재 브랜치(또는 지정 브랜치)를 `dev`에 rebase/ff-only 반영 후 push합니다.
 
 ```bash
 grsync
-```
-
-특정 브랜치를 명시해서 실행할 수도 있습니다.
-
-```bash
-grsync feature/user-auth
 # 또는
 grsync -b feature/user-auth
 ```
 
-실행 흐름:
-1. `dev`를 원격 기준으로 `ff-only` 업데이트
-2. 대상 브랜치를 `dev` 기준으로 `rebase`
-3. (선택) `--squash` 사용 시 대상 브랜치 커밋을 1개로 합치기
-4. `dev`에 `--ff-only` 머지
-5. `origin/dev` push (거절 시 rebase 후 재시도)
+### to-main 모드
 
-### 메인 반영 모드: dev -> main 동기화
-
-`dev`를 `main` 기준으로 rebase한 뒤 `main`에 fast-forward merge하여 배포용 히스토리를 정리합니다.
-
-```bash
-grsync --to-main
-```
-
-브랜치 이름이 다르면 명시할 수 있습니다.
+`dev`를 `main` 기준으로 rebase한 뒤 `main`에 ff-only 반영합니다.
 
 ```bash
 grsync --to-main -m main -d dev
 ```
 
-실행 흐름:
-1. `main`, `dev`를 원격 기준으로 `ff-only` 업데이트
-2. `dev`를 `main` 위로 rebase
-3. `origin/dev`에 `--force-with-lease` push
-4. `main`에 `--ff-only` merge
-5. `origin/main` push (거절 시 rebase 후 재시도)
+### squash 반영
 
-## 주요 옵션
-
-- `--to-main`: `dev -> main` 동기화 모드 실행
-- `--to-dev`: `target -> dev` 동기화 모드 실행(기본값)
-- `--branch <name>`, `-b <name>`: `to-dev` 모드의 대상 브랜치 지정
-- `--main-branch <name>`, `-m <name>`: 메인 브랜치 이름 지정
-- `--dev-branch <name>`, `-d <name>`: 개발 브랜치 이름 지정
-- `--remote <name>`, `-r <name>`: 원격 이름 지정(기본 `origin`)
-- `--max-push-retry <num>`: push 재시도 횟수 지정
-- `--squash`: `to-dev` 모드에서 대상 브랜치 커밋을 1개로 squash
-- `--commit <text>`, `-c <text>`: `--squash` 시 사용할 커밋 메시지
-- `--dry-run`: 실제 변경 없이 실행 명령만 출력
-- `--yes`, `-y`: 확인 프롬프트 건너뛰기
-
-## 명령 작성 순서 (권장)
-
-옵션 순서는 기술적으로 유연하지만, 아래 순서로 작성하면 실수를 줄일 수 있습니다.
-
-1. 모드 옵션 (최우선)
-- `--to-main` 또는 `--to-dev` (`--to-dev`는 기본값이라 생략 가능)
-
-2. 대상/브랜치 옵션
-- `--branch <name>` 또는 `-b <name>` (to-dev)
-- `--main-branch <name>`(`-m`) + `--dev-branch <name>`(`-d`) (to-main)
-
-3. 동작 옵션
-- `--squash`
-- `--commit <text>` 또는 `-c <text>` (`--squash`와 함께 필수)
-
-4. 실행 제어 옵션
-- `--remote <name>` 또는 `-r <name>`
-- `--max-push-retry <num>`
-- `--dry-run`
-- `--yes`
-
-권장 예시
-
-```bash
-# 기본 모드
-grsync --branch feature/test
-
-# 모드를 명시하고 실행
-grsync --to-dev -b feature/test
-
-# squash + 메시지
-grsync --to-dev -b feature/test --squash -c "feat: merge feature test"
-
-# main 반영 모드
-grsync --to-main -m main -d dev --yes
-```
-
-## 추천 실행 예시
-
-변경 전 시뮬레이션:
-
-```bash
-grsync --dry-run -b feature/user-auth
-```
-
-CI/자동화 환경(프롬프트 없이):
-
-```bash
-grsync --yes -b feature/user-auth
-```
-
-커스텀 원격 사용:
-
-```bash
-grsync -r upstream -b feature/payment-checkout
-```
-
-Squash로 1커밋 정리 후 반영:
+작업 브랜치 커밋을 1개로 합친 뒤 `dev`에 반영합니다.
 
 ```bash
 grsync -b feature/user-auth --squash -c "feat: integrate user auth"
 ```
 
-## 안전장치
+## 주요 옵션
 
-- 작업 트리 dirty 상태면 즉시 중단합니다.
-- detached HEAD 상태면 중단합니다.
-- 로컬/원격 브랜치 존재 여부를 검증합니다.
-- 작업 종료 시 원래 브랜치로 복귀를 시도합니다.
-- 실패 시 경고 메시지를 남기고 수동 점검이 가능하도록 중단합니다.
+- `--to-main`: `dev -> main` 동기화 모드
+- `--to-dev`: `target -> dev` 동기화 모드 (기본값)
+- `--branch <name>`, `-b <name>`: 대상 브랜치
+- `--main-branch <name>`, `-m <name>`: 메인 브랜치
+- `--dev-branch <name>`, `-d <name>`: 개발 브랜치
+- `--remote <name>`, `-r <name>`: 원격 이름
+- `--squash`: to-dev에서 대상 커밋 squash
+- `--commit <text>`, `-c <text>`: squash 커밋 메시지
+- `--max-push-retry <num>`: push 재시도 횟수
+- `--dry-run`: 변경 없이 명령만 출력
+- `--yes`, `-y`: 확인 프롬프트 생략
+- `--init`: 프로젝트 로컬 설정 강제 초기화
+- `--show-config`: 현재 프로젝트 적용 설정 출력
 
-## 자주 발생하는 오류와 해결
+## 권장 명령 순서
 
-- `원격 브랜치가 없습니다: origin/main`
-  - 원격 브랜치명이 다를 수 있습니다.
-  - `--main-branch(-m)`, `--dev-branch(-d)`, `--remote(-r)` 옵션으로 실제 이름을 맞춰 실행하세요.
+1. 모드: `--to-main` / `--to-dev`
+2. 브랜치: `-b`, `-m`, `-d`
+3. 동작: `--squash`, `-c`
+4. 제어: `-r`, `--dry-run`, `-y`
+
+예시:
+
+```bash
+grsync --to-dev -b feature/test --squash -c "feat: merge feature test" --dry-run
+grsync --to-main -m main -d dev -y
+```
+
+## 오류 대응
+
+- `원격 브랜치가 없습니다`
+  - `-r`, `-m`, `-d` 옵션 또는 `grsync --init`으로 설정 재생성
 - `작업 트리가 깨끗하지 않습니다`
-  - `git status` 확인 후 커밋 또는 스태시하세요.
-- `push 재시도 한도(...)를 초과했습니다`
-  - 동시 반영 충돌 가능성이 큽니다.
-  - 원격 최신 이력을 확인하고 수동으로 rebase/merge 후 다시 실행하세요.
-
-## 운영 권장 순서
-
-1. `--dry-run`으로 명령 흐름 확인
-2. 팀과 대상 브랜치/타이밍 공유
-3. 실제 실행(`--yes`는 자동화에서만 사용 권장)
-4. 실행 후 `git log --oneline --graph --decorate -20`으로 이력 확인
+  - 커밋/스태시 후 재실행
+- `push 재시도 한도 초과`
+  - 원격 최신 이력 확인 후 수동 rebase/merge

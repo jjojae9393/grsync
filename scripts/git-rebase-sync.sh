@@ -6,6 +6,8 @@ readonly DEFAULT_REMOTE="origin"
 readonly DEFAULT_MAIN_BRANCH="main"
 readonly DEFAULT_DEV_BRANCH="dev"
 readonly DEFAULT_MAX_PUSH_RETRY=5
+readonly CONFIG_DIR_NAME="grsync"
+readonly CONFIG_FILE_NAME="config"
 
 MODE="to-dev"
 REMOTE="${DEFAULT_REMOTE}"
@@ -18,8 +20,16 @@ RETURN_TO_ORIGINAL_BRANCH=true
 TARGET_BRANCH=""
 SQUASH=false
 SQUASH_MESSAGE=""
+INIT_ONLY=false
+SHOW_CONFIG=false
+
+REMOTE_EXPLICIT=false
+MAIN_BRANCH_EXPLICIT=false
+DEV_BRANCH_EXPLICIT=false
 
 ORIGINAL_BRANCH=""
+REPO_ROOT=""
+REPO_CONFIG_FILE=""
 
 log() {
   printf '[%s] %s\n' "${SCRIPT_NAME}" "$*"
@@ -57,25 +67,27 @@ Modes:
     5) push main to origin with retry
 
 Options:
-  --to-main                 Run dev -> main sync flow
-  --to-dev                  Run target -> dev sync flow (default)
-  --branch, -b <name>      Target branch for to-dev flow
-  --main-branch, -m <name>  Main branch name (default: ${DEFAULT_MAIN_BRANCH})
-  --dev-branch, -d <name>   Dev branch name (default: ${DEFAULT_DEV_BRANCH})
-  --remote, -r <name>       Remote name (default: ${DEFAULT_REMOTE})
-  --max-push-retry <num>    Push retry count (default: ${DEFAULT_MAX_PUSH_RETRY})
-  --squash                  Squash target commits into a single commit (to-dev only)
-  --commit, -c <text>       Commit message used with --squash
-  --dry-run                 Print git commands without executing mutating commands
-  --yes, -y                 Skip confirmation prompts
-  --help, -h                Show this help
+  --to-main                   Run dev -> main sync flow
+  --to-dev                    Run target -> dev sync flow (default)
+  --branch, -b <name>         Target branch for to-dev flow
+  --main-branch, -m <name>    Main branch name
+  --dev-branch, -d <name>     Dev branch name
+  --remote, -r <name>         Remote name
+  --max-push-retry <num>      Push retry count (default: ${DEFAULT_MAX_PUSH_RETRY})
+  --squash                    Squash target commits into a single commit (to-dev only)
+  --commit, -c <text>         Commit message used with --squash
+  --init                      Initialize or refresh this repository's local grsync config
+  --show-config               Show effective config for current repository and exit
+  --dry-run                   Print git commands without executing mutating commands
+  --yes, -y                   Skip confirmation prompts
+  --help, -h                  Show this help
 
 Examples:
-  ${SCRIPT_NAME} feature/user-auth
   ${SCRIPT_NAME} -b feature/user-auth
   ${SCRIPT_NAME} -b feature/user-auth --squash -c "feat: add user auth"
-  ${SCRIPT_NAME} --to-main
-  ${SCRIPT_NAME} --to-main --main-branch main --dev-branch dev --yes
+  ${SCRIPT_NAME} --to-main -m main -d dev --yes
+  ${SCRIPT_NAME} --init
+  ${SCRIPT_NAME} --show-config
 USAGE
 }
 
@@ -97,12 +109,17 @@ git_cmd() {
   run_cmd git "$@"
 }
 
+ensure_required_command() {
+  command -v "$1" >/dev/null 2>&1 || die "필수 명령어를 찾을 수 없습니다: $1"
+}
+
 ensure_inside_git_repo() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Git 저장소에서 실행하세요."
 }
 
-ensure_required_command() {
-  command -v "$1" >/dev/null 2>&1 || die "필수 명령어를 찾을 수 없습니다: $1"
+set_repo_paths() {
+  REPO_ROOT="$(git rev-parse --show-toplevel)"
+  REPO_CONFIG_FILE="${REPO_ROOT}/.git/${CONFIG_DIR_NAME}/${CONFIG_FILE_NAME}"
 }
 
 require_non_empty_branch() {
@@ -168,6 +185,166 @@ validate_squash_options() {
   if [[ "${SQUASH}" != "true" && -n "${SQUASH_MESSAGE}" ]]; then
     die "--commit(-c)는 --squash와 함께 사용해야 합니다."
   fi
+}
+
+detect_default_remote() {
+  if git remote get-url "${DEFAULT_REMOTE}" >/dev/null 2>&1; then
+    echo "${DEFAULT_REMOTE}"
+    return 0
+  fi
+
+  local first_remote
+  first_remote="$(git remote | head -n 1)"
+
+  if [[ -n "${first_remote}" ]]; then
+    echo "${first_remote}"
+    return 0
+  fi
+
+  echo "${DEFAULT_REMOTE}"
+}
+
+detect_default_main_branch() {
+  local remote_name="$1"
+  local remote_head_ref
+
+  if git show-ref --verify --quiet "refs/heads/main"; then
+    echo "main"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/master"; then
+    echo "master"
+    return 0
+  fi
+
+  remote_head_ref="$(git symbolic-ref --quiet --short "refs/remotes/${remote_name}/HEAD" 2>/dev/null || true)"
+
+  if [[ -n "${remote_head_ref}" ]]; then
+    echo "${remote_head_ref#${remote_name}/}"
+    return 0
+  fi
+
+  echo "${DEFAULT_MAIN_BRANCH}"
+}
+
+detect_default_dev_branch() {
+  local remote_name="$1"
+
+  if git show-ref --verify --quiet "refs/heads/dev"; then
+    echo "dev"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/develop"; then
+    echo "develop"
+    return 0
+  fi
+
+  if git ls-remote --exit-code --heads "${remote_name}" "dev" >/dev/null 2>&1; then
+    echo "dev"
+    return 0
+  fi
+
+  if git ls-remote --exit-code --heads "${remote_name}" "develop" >/dev/null 2>&1; then
+    echo "develop"
+    return 0
+  fi
+
+  echo "${DEFAULT_DEV_BRANCH}"
+}
+
+write_repo_config() {
+  local config_remote="$1"
+  local config_main_branch="$2"
+  local config_dev_branch="$3"
+  local config_dir
+
+  config_dir="$(dirname "${REPO_CONFIG_FILE}")"
+  mkdir -p "${config_dir}"
+
+  cat > "${REPO_CONFIG_FILE}" <<CONFIG
+# ${SCRIPT_NAME} repository-local config
+GRSYNC_REMOTE=${config_remote}
+GRSYNC_MAIN_BRANCH=${config_main_branch}
+GRSYNC_DEV_BRANCH=${config_dev_branch}
+CONFIG
+}
+
+initialize_repo_config() {
+  local detected_remote
+  local resolved_remote
+  local resolved_main_branch
+  local resolved_dev_branch
+
+  detected_remote="$(detect_default_remote)"
+
+  if [[ "${REMOTE_EXPLICIT}" == "true" ]]; then
+    resolved_remote="${REMOTE}"
+  else
+    resolved_remote="${detected_remote}"
+  fi
+
+  if [[ "${MAIN_BRANCH_EXPLICIT}" == "true" ]]; then
+    resolved_main_branch="${MAIN_BRANCH}"
+  else
+    resolved_main_branch="$(detect_default_main_branch "${resolved_remote}")"
+  fi
+
+  if [[ "${DEV_BRANCH_EXPLICIT}" == "true" ]]; then
+    resolved_dev_branch="${DEV_BRANCH}"
+  else
+    resolved_dev_branch="$(detect_default_dev_branch "${resolved_remote}")"
+  fi
+
+  write_repo_config "${resolved_remote}" "${resolved_main_branch}" "${resolved_dev_branch}"
+
+  log "레포지토리 등록 완료: ${REPO_CONFIG_FILE}"
+}
+
+auto_register_repo_if_needed() {
+  if [[ -f "${REPO_CONFIG_FILE}" ]]; then
+    return 0
+  fi
+
+  initialize_repo_config
+}
+
+load_repo_config() {
+  if [[ ! -f "${REPO_CONFIG_FILE}" ]]; then
+    return 0
+  fi
+
+  local GRSYNC_REMOTE=""
+  local GRSYNC_MAIN_BRANCH=""
+  local GRSYNC_DEV_BRANCH=""
+
+  # shellcheck disable=SC1090
+  source "${REPO_CONFIG_FILE}"
+
+  if [[ "${REMOTE_EXPLICIT}" != "true" && -n "${GRSYNC_REMOTE}" ]]; then
+    REMOTE="${GRSYNC_REMOTE}"
+  fi
+
+  if [[ "${MAIN_BRANCH_EXPLICIT}" != "true" && -n "${GRSYNC_MAIN_BRANCH}" ]]; then
+    MAIN_BRANCH="${GRSYNC_MAIN_BRANCH}"
+  fi
+
+  if [[ "${DEV_BRANCH_EXPLICIT}" != "true" && -n "${GRSYNC_DEV_BRANCH}" ]]; then
+    DEV_BRANCH="${GRSYNC_DEV_BRANCH}"
+  fi
+}
+
+print_effective_config() {
+  cat <<CONFIG
+[${SCRIPT_NAME}] effective config
+repo_root=${REPO_ROOT}
+config_file=${REPO_CONFIG_FILE}
+remote=${REMOTE}
+main_branch=${MAIN_BRANCH}
+dev_branch=${DEV_BRANCH}
+mode=${MODE}
+CONFIG
 }
 
 checkout_branch() {
@@ -312,16 +489,19 @@ parse_args() {
       --main-branch|-m)
         [[ $# -ge 2 ]] || die "--main-branch(-m) 에 값이 필요합니다."
         MAIN_BRANCH="$2"
+        MAIN_BRANCH_EXPLICIT=true
         shift 2
         ;;
       --dev-branch|-d)
         [[ $# -ge 2 ]] || die "--dev-branch(-d) 에 값이 필요합니다."
         DEV_BRANCH="$2"
+        DEV_BRANCH_EXPLICIT=true
         shift 2
         ;;
       --remote|-r)
         [[ $# -ge 2 ]] || die "--remote(-r) 에 값이 필요합니다."
         REMOTE="$2"
+        REMOTE_EXPLICIT=true
         shift 2
         ;;
       --max-push-retry)
@@ -338,6 +518,14 @@ parse_args() {
         SQUASH_MESSAGE="$2"
         shift 2
         ;;
+      --init)
+        INIT_ONLY=true
+        shift
+        ;;
+      --show-config)
+        SHOW_CONFIG=true
+        shift
+        ;;
       --dry-run)
         DRY_RUN=true
         shift
@@ -350,7 +538,7 @@ parse_args() {
         usage
         exit 0
         ;;
-      -*)
+      -* )
         die "알 수 없는 옵션입니다: $1"
         ;;
       *)
@@ -363,10 +551,12 @@ parse_args() {
   if [[ "${MODE}" == "to-main" ]]; then
     if [[ ${#positional[@]} -ge 1 ]]; then
       MAIN_BRANCH="${positional[0]}"
+      MAIN_BRANCH_EXPLICIT=true
     fi
 
     if [[ ${#positional[@]} -ge 2 ]]; then
       DEV_BRANCH="${positional[1]}"
+      DEV_BRANCH_EXPLICIT=true
     fi
 
     if [[ ${#positional[@]} -ge 3 ]]; then
@@ -453,8 +643,25 @@ sync_to_main() {
 
 main() {
   ensure_required_command git
-  ensure_inside_git_repo
   parse_args "$@"
+  ensure_inside_git_repo
+
+  set_repo_paths
+
+  if [[ "${INIT_ONLY}" == "true" ]]; then
+    initialize_repo_config
+    load_repo_config
+    print_effective_config
+    return 0
+  fi
+
+  auto_register_repo_if_needed
+  load_repo_config
+
+  if [[ "${SHOW_CONFIG}" == "true" ]]; then
+    print_effective_config
+    return 0
+  fi
 
   validate_positive_integer "${MAX_PUSH_RETRY}"
   validate_squash_options
