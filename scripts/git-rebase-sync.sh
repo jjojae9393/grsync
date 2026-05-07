@@ -16,6 +16,8 @@ DRY_RUN=false
 AUTO_CONFIRM=false
 RETURN_TO_ORIGINAL_BRANCH=true
 TARGET_BRANCH=""
+SQUASH=false
+SQUASH_MESSAGE=""
 
 ORIGINAL_BRANCH=""
 
@@ -43,8 +45,9 @@ Modes:
   default (to-dev):
     1) update dev from origin (ff-only)
     2) rebase target branch on dev
-    3) fast-forward merge target -> dev
-    4) push dev to origin with retry
+    3) optional: squash target commits into one commit (--squash)
+    4) fast-forward merge target -> dev
+    5) push dev to origin with retry
 
   --to-main:
     1) update main/dev from origin (ff-only)
@@ -61,13 +64,16 @@ Options:
   --dev-branch <name>       Dev branch name (default: ${DEFAULT_DEV_BRANCH})
   --remote <name>           Remote name (default: ${DEFAULT_REMOTE})
   --max-push-retry <num>    Push retry count (default: ${DEFAULT_MAX_PUSH_RETRY})
+  --squash                  Squash target commits into a single commit (to-dev only)
+  --message, -m <text>      Commit message used with --squash
   --dry-run                 Print git commands without executing mutating commands
   --yes, -y                 Skip confirmation prompts
   --help, -h                Show this help
 
 Examples:
-  ${SCRIPT_NAME} feature/twice/order-new-option
-  ${SCRIPT_NAME} --branch feature/twice/order-new-option
+  ${SCRIPT_NAME} feature/user-auth
+  ${SCRIPT_NAME} --branch feature/user-auth
+  ${SCRIPT_NAME} --branch feature/user-auth --squash -m "feat: add user auth"
   ${SCRIPT_NAME} --to-main
   ${SCRIPT_NAME} --to-main --main-branch main --dev-branch dev --yes
 USAGE
@@ -140,6 +146,30 @@ validate_positive_integer() {
   [[ "${value}" =~ ^[1-9][0-9]*$ ]] || die "양의 정수만 허용됩니다: ${value}"
 }
 
+validate_squash_options() {
+  local is_main_mode=false
+
+  if [[ "${MODE}" == "to-main" ]]; then
+    is_main_mode=true
+  fi
+
+  if [[ "${is_main_mode}" == "true" && "${SQUASH}" == "true" ]]; then
+    die "--squash 옵션은 to-dev 모드에서만 사용할 수 있습니다."
+  fi
+
+  if [[ "${is_main_mode}" == "true" && -n "${SQUASH_MESSAGE}" ]]; then
+    die "--message(-m) 옵션은 to-dev 모드에서만 사용할 수 있습니다."
+  fi
+
+  if [[ "${SQUASH}" == "true" && -z "${SQUASH_MESSAGE}" ]]; then
+    die "--squash 사용 시 --message 또는 -m 으로 커밋 메시지를 입력하세요."
+  fi
+
+  if [[ "${SQUASH}" != "true" && -n "${SQUASH_MESSAGE}" ]]; then
+    die "--message(-m)는 --squash와 함께 사용해야 합니다."
+  fi
+}
+
 checkout_branch() {
   local branch="$1"
   git_cmd switch "${branch}"
@@ -201,6 +231,23 @@ push_with_retry() {
 
     push_try=$((push_try + 1))
   done
+}
+
+squash_branch_on_base() {
+  local target_branch="$1"
+  local base_branch="$2"
+  local commit_message="$3"
+  local commit_count
+
+  commit_count="$(git rev-list --count "${base_branch}..${target_branch}")"
+
+  if [[ "${commit_count}" == "0" ]]; then
+    die "squash 대상 커밋이 없습니다: ${target_branch} (base: ${base_branch})"
+  fi
+
+  log "squash 적용: ${target_branch} 의 ${commit_count}개 커밋을 1개로 합칩니다"
+  git_cmd reset --soft "${base_branch}"
+  git_cmd commit -m "${commit_message}"
 }
 
 restore_original_branch() {
@@ -282,6 +329,15 @@ parse_args() {
         MAX_PUSH_RETRY="$2"
         shift 2
         ;;
+      --squash)
+        SQUASH=true
+        shift
+        ;;
+      --message|-m)
+        [[ $# -ge 2 ]] || die "--message(-m) 에 값이 필요합니다."
+        SQUASH_MESSAGE="$2"
+        shift 2
+        ;;
       --dry-run)
         DRY_RUN=true
         shift
@@ -347,11 +403,16 @@ sync_to_dev() {
   checkout_branch "${target_branch}"
   git_cmd rebase "${DEV_BRANCH}"
 
-  log "3) ${DEV_BRANCH} 에 ff-only merge"
+  if [[ "${SQUASH}" == "true" ]]; then
+    log "3) ${target_branch} 커밋 squash"
+    squash_branch_on_base "${target_branch}" "${DEV_BRANCH}" "${SQUASH_MESSAGE}"
+  fi
+
+  log "4) ${DEV_BRANCH} 에 ff-only merge"
   checkout_branch "${DEV_BRANCH}"
   git_cmd merge --ff-only "${target_branch}"
 
-  log "4) origin/${DEV_BRANCH} push (거절 시 rebase 후 재시도)"
+  log "5) origin/${DEV_BRANCH} push (거절 시 rebase 후 재시도)"
   push_with_retry "${DEV_BRANCH}"
 
   log "완료: ${DEV_BRANCH} <- ${target_branch} (ff-only + push)"
@@ -396,6 +457,7 @@ main() {
   parse_args "$@"
 
   validate_positive_integer "${MAX_PUSH_RETRY}"
+  validate_squash_options
   require_clean_worktree
   require_detached_head_absent
 

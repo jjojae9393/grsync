@@ -93,8 +93,9 @@ grsync --branch feature/user-auth
 실행 흐름:
 1. `dev`를 원격 기준으로 `ff-only` 업데이트
 2. 대상 브랜치를 `dev` 기준으로 `rebase`
-3. `dev`에 `--ff-only` 머지
-4. `origin/dev` push (거절 시 rebase 후 재시도)
+3. (선택) `--squash` 사용 시 대상 브랜치 커밋을 1개로 합치기
+4. `dev`에 `--ff-only` 머지
+5. `origin/dev` push (거절 시 rebase 후 재시도)
 
 ### 메인 반영 모드: dev -> main 동기화
 
@@ -126,8 +127,47 @@ grsync --to-main --main-branch main --dev-branch dev
 - `--dev-branch <name>`: 개발 브랜치 이름 지정
 - `--remote <name>`: 원격 이름 지정(기본 `origin`)
 - `--max-push-retry <num>`: push 재시도 횟수 지정
+- `--squash`: `to-dev` 모드에서 대상 브랜치 커밋을 1개로 squash
+- `--message <text>`, `-m <text>`: `--squash` 시 사용할 커밋 메시지
 - `--dry-run`: 실제 변경 없이 실행 명령만 출력
 - `--yes`, `-y`: 확인 프롬프트 건너뛰기
+
+## 명령 작성 순서 (권장)
+
+옵션 순서는 기술적으로 유연하지만, 아래 순서로 작성하면 실수를 줄일 수 있습니다.
+
+1. 모드 옵션 (최우선)
+- `--to-main` 또는 `--to-dev` (`--to-dev`는 기본값이라 생략 가능)
+
+2. 대상/브랜치 옵션
+- `--branch <name>` (to-dev)
+- `--main-branch <name> --dev-branch <name>` (to-main)
+
+3. 동작 옵션
+- `--squash`
+- `--message <text>` 또는 `-m <text>` (`--squash`와 함께 필수)
+
+4. 실행 제어 옵션
+- `--remote <name>`
+- `--max-push-retry <num>`
+- `--dry-run`
+- `--yes`
+
+권장 예시
+
+```bash
+# 기본 모드
+grsync --branch feature/test
+
+# 모드를 명시하고 실행
+grsync --to-dev --branch feature/test
+
+# squash + 메시지
+grsync --to-dev --branch feature/test --squash -m "feat: merge feature test"
+
+# main 반영 모드
+grsync --to-main --main-branch main --dev-branch dev --yes
+```
 
 ## 추천 실행 예시
 
@@ -147,6 +187,12 @@ grsync --yes --branch feature/user-auth
 
 ```bash
 grsync --remote upstream --branch feature/payment-checkout
+```
+
+Squash로 1커밋 정리 후 반영:
+
+```bash
+grsync --branch feature/user-auth --squash -m "feat: integrate user auth"
 ```
 
 ## 안전장치
