@@ -85,9 +85,9 @@ scripts/git-rebase-sync.sh
 특정 브랜치를 명시해서 실행할 수도 있습니다.
 
 ```bash
-scripts/git-rebase-sync.sh feature/twice/order-new-option
+scripts/git-rebase-sync.sh feature/user-auth
 # 또는
-scripts/git-rebase-sync.sh --branch feature/twice/order-new-option
+scripts/git-rebase-sync.sh --branch feature/user-auth
 ```
 
 실행 흐름:
@@ -134,19 +134,19 @@ scripts/git-rebase-sync.sh --to-main --main-branch main --dev-branch dev
 변경 전 시뮬레이션:
 
 ```bash
-scripts/git-rebase-sync.sh --dry-run --branch feature/twice/order-new-option
+grsync --dry-run --branch feature/user-auth
 ```
 
 CI/자동화 환경(프롬프트 없이):
 
 ```bash
-scripts/git-rebase-sync.sh --yes --branch feature/twice/order-new-option
+grsync --yes --branch feature/user-auth
 ```
 
 커스텀 원격 사용:
 
 ```bash
-scripts/git-rebase-sync.sh --remote upstream --branch feature/twice/order-new-option
+grsync --remote upstream --branch feature/payment-checkout
 ```
 
 ## 안전장치
