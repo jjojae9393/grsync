@@ -71,7 +71,7 @@ grsync --help
 ### 도움말
 
 ```bash
-scripts/git-rebase-sync.sh --help
+grsync --help
 ```
 
 ### 기본 모드: 작업 브랜치 -> dev 동기화
@@ -79,15 +79,15 @@ scripts/git-rebase-sync.sh --help
 현재 브랜치를 `dev`에 fast-forward 가능한 형태로 반영하고 `origin/dev`까지 push합니다.
 
 ```bash
-scripts/git-rebase-sync.sh
+grsync
 ```
 
 특정 브랜치를 명시해서 실행할 수도 있습니다.
 
 ```bash
-scripts/git-rebase-sync.sh feature/user-auth
+grsync feature/user-auth
 # 또는
-scripts/git-rebase-sync.sh --branch feature/user-auth
+grsync --branch feature/user-auth
 ```
 
 실행 흐름:
@@ -101,13 +101,13 @@ scripts/git-rebase-sync.sh --branch feature/user-auth
 `dev`를 `main` 기준으로 rebase한 뒤 `main`에 fast-forward merge하여 배포용 히스토리를 정리합니다.
 
 ```bash
-scripts/git-rebase-sync.sh --to-main
+grsync --to-main
 ```
 
 브랜치 이름이 다르면 명시할 수 있습니다.
 
 ```bash
-scripts/git-rebase-sync.sh --to-main --main-branch main --dev-branch dev
+grsync --to-main --main-branch main --dev-branch dev
 ```
 
 실행 흐름:
