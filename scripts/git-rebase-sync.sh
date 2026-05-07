@@ -59,7 +59,7 @@ Modes:
 Options:
   --to-main                 Run dev -> main sync flow
   --to-dev                  Run target -> dev sync flow (default)
-  --branch <name>           Target branch for to-dev flow
+  --branch, -b <name>      Target branch for to-dev flow
   --main-branch, -m <name>  Main branch name (default: ${DEFAULT_MAIN_BRANCH})
   --dev-branch, -d <name>   Dev branch name (default: ${DEFAULT_DEV_BRANCH})
   --remote, -r <name>       Remote name (default: ${DEFAULT_REMOTE})
@@ -72,8 +72,8 @@ Options:
 
 Examples:
   ${SCRIPT_NAME} feature/user-auth
-  ${SCRIPT_NAME} --branch feature/user-auth
-  ${SCRIPT_NAME} --branch feature/user-auth --squash -c "feat: add user auth"
+  ${SCRIPT_NAME} -b feature/user-auth
+  ${SCRIPT_NAME} -b feature/user-auth --squash -c "feat: add user auth"
   ${SCRIPT_NAME} --to-main
   ${SCRIPT_NAME} --to-main --main-branch main --dev-branch dev --yes
 USAGE
@@ -304,8 +304,8 @@ parse_args() {
         MODE="to-dev"
         shift
         ;;
-      --branch)
-        [[ $# -ge 2 ]] || die "--branch 에 값이 필요합니다."
+      --branch|-b)
+        [[ $# -ge 2 ]] || die "--branch(-b) 에 값이 필요합니다."
         TARGET_BRANCH="$2"
         shift 2
         ;;

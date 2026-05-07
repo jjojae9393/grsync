@@ -87,7 +87,7 @@ grsync
 ```bash
 grsync feature/user-auth
 # 또는
-grsync --branch feature/user-auth
+grsync -b feature/user-auth
 ```
 
 실행 흐름:
@@ -122,7 +122,7 @@ grsync --to-main -m main -d dev
 
 - `--to-main`: `dev -> main` 동기화 모드 실행
 - `--to-dev`: `target -> dev` 동기화 모드 실행(기본값)
-- `--branch <name>`: `to-dev` 모드의 대상 브랜치 지정
+- `--branch <name>`, `-b <name>`: `to-dev` 모드의 대상 브랜치 지정
 - `--main-branch <name>`, `-m <name>`: 메인 브랜치 이름 지정
 - `--dev-branch <name>`, `-d <name>`: 개발 브랜치 이름 지정
 - `--remote <name>`, `-r <name>`: 원격 이름 지정(기본 `origin`)
@@ -140,7 +140,7 @@ grsync --to-main -m main -d dev
 - `--to-main` 또는 `--to-dev` (`--to-dev`는 기본값이라 생략 가능)
 
 2. 대상/브랜치 옵션
-- `--branch <name>` (to-dev)
+- `--branch <name>` 또는 `-b <name>` (to-dev)
 - `--main-branch <name>`(`-m`) + `--dev-branch <name>`(`-d`) (to-main)
 
 3. 동작 옵션
@@ -160,10 +160,10 @@ grsync --to-main -m main -d dev
 grsync --branch feature/test
 
 # 모드를 명시하고 실행
-grsync --to-dev --branch feature/test
+grsync --to-dev -b feature/test
 
 # squash + 메시지
-grsync --to-dev --branch feature/test --squash -c "feat: merge feature test"
+grsync --to-dev -b feature/test --squash -c "feat: merge feature test"
 
 # main 반영 모드
 grsync --to-main -m main -d dev --yes
@@ -174,25 +174,25 @@ grsync --to-main -m main -d dev --yes
 변경 전 시뮬레이션:
 
 ```bash
-grsync --dry-run --branch feature/user-auth
+grsync --dry-run -b feature/user-auth
 ```
 
 CI/자동화 환경(프롬프트 없이):
 
 ```bash
-grsync --yes --branch feature/user-auth
+grsync --yes -b feature/user-auth
 ```
 
 커스텀 원격 사용:
 
 ```bash
-grsync -r upstream --branch feature/payment-checkout
+grsync -r upstream -b feature/payment-checkout
 ```
 
 Squash로 1커밋 정리 후 반영:
 
 ```bash
-grsync --branch feature/user-auth --squash -c "feat: integrate user auth"
+grsync -b feature/user-auth --squash -c "feat: integrate user auth"
 ```
 
 ## 안전장치
